@@ -1,0 +1,292 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: windows11-qe-virtio-autounattend
+data:
+  autounattend.xml: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <settings pass="windowsPE">
+        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <SetupUILanguage>
+            <UILanguage>en-US</UILanguage>
+          </SetupUILanguage>
+          <InputLocale>0409:00000409</InputLocale>
+          <SystemLocale>en-US</SystemLocale>
+          <UILanguage>en-US</UILanguage>
+          <UserLocale>en-US</UserLocale>
+        </component>
+        <component name="Microsoft-Windows-PnpCustomizationsWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <DriverPaths>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+              <Path>E:\viostor\w11\amd64</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+              <Path>E:\NetKVM\w11\amd64</Path>
+            </PathAndCredentials>
+          </DriverPaths>
+        </component>
+        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <DiskConfiguration>
+            <WillShowUI>Never</WillShowUI>
+            <Disk wcm:action="add">
+              <!-- https://foxpa.ws/win-10-11-unattended -->
+              <!-- https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/configure-uefigpt-based-hard-drive-partitions?view=windows-11 -->
+              <CreatePartitions>
+                  <CreatePartition wcm:action="add">
+                      <Order>1</Order>
+                      <Type>EFI</Type>
+                      <Size>100</Size>
+                  </CreatePartition>
+                  <CreatePartition wcm:action="add">
+                      <Order>2</Order>
+                      <Type>MSR</Type>
+                      <Size>16</Size>
+                  </CreatePartition>
+                  <CreatePartition wcm:action="add">
+                      <Order>3</Order>
+                      <Type>Primary</Type>
+                      <Extend>true</Extend>
+                  </CreatePartition>
+              </CreatePartitions>
+              <ModifyPartitions>
+                <ModifyPartition wcm:action="add">
+                    <Order>1</Order>
+                    <PartitionID>1</PartitionID>
+                    <Label>EFI</Label>
+                    <Format>FAT32</Format>
+                </ModifyPartition>
+                <ModifyPartition wcm:action="add">
+                    <Order>2</Order>
+                    <PartitionID>3</PartitionID>
+                    <Label>Windows</Label>
+                    <Letter>C</Letter>
+                    <Format>NTFS</Format>
+                </ModifyPartition>
+              </ModifyPartitions>
+              <DiskID>0</DiskID>
+              <WillWipeDisk>true</WillWipeDisk>
+            </Disk>
+          </DiskConfiguration>
+          <ImageInstall>
+            <OSImage>
+              <InstallFrom>
+                <MetaData wcm:action="add">
+                  <Key>/Image/Description</Key>
+                  <Value>Windows 11 Pro</Value>
+                </MetaData>
+              </InstallFrom>
+              <InstallTo>
+                <DiskID>0</DiskID>
+                <PartitionID>3</PartitionID>
+              </InstallTo>
+            </OSImage>
+          </ImageInstall>
+          <UserData>
+            <AcceptEula>false</AcceptEula>
+            <ProductKey>
+              <Key/>
+            </ProductKey>
+          </UserData>
+        </component>
+      </settings>
+      <settings pass="auditUser">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <RunSynchronous>
+            <RunSynchronousCommand wcm:action="add">
+              <Order>1</Order>
+              <Path>PowerShell -ExecutionPolicy Bypass F:\enable-wsl.ps1</Path>
+              <Description>install wsl</Description>
+              <WillReboot>Always</WillReboot>
+            </RunSynchronousCommand>
+            <RunSynchronousCommand wcm:action="add">
+              <Order>2</Order>
+              <Path>PowerShell -ExecutionPolicy Bypass F:\post-update.ps1</Path>
+              <Description>install required sw</Description>
+              <WillReboot>Always</WillReboot>
+            </RunSynchronousCommand>
+            <RunSynchronousCommand wcm:action="add">
+              <Order>3</Order>
+              <Path>C:\Windows\System32\Sysprep\Sysprep.exe /oobe /reboot /unattend:F:\skip-oobe.xml</Path>
+              <Description>Jump to OOBE</Description>
+            </RunSynchronousCommand>
+          </RunSynchronous>
+        </component>
+      </settings>
+      <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <Reseal>
+            <Mode>Audit</Mode>
+          </Reseal>
+        </component>
+      </settings>
+    </unattend>
+  skip-oobe.xml: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <settings pass="specialize">
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <InputLocale>0409:00000409</InputLocale>
+          <SystemLocale>en-US</SystemLocale>
+          <UILanguage>en-US</UILanguage>
+          <UserLocale>en-US</UserLocale>
+        </component>
+      </settings>
+      <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <InputLocale>0409:00000409</InputLocale>
+          <SystemLocale>en-US</SystemLocale>
+          <UILanguage>en-US</UILanguage>
+          <UILanguageFallback>en-US</UILanguageFallback>
+          <UserLocale>en-US</UserLocale>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+          <UserAccounts>
+            <AdministratorPassword>
+              <Value>Heslo123</Value>
+              <PlainText>true</PlainText>
+            </AdministratorPassword>
+          </UserAccounts>
+          <AutoLogon>
+            <Enabled>true</Enabled>
+            <Password>
+              <Value>Heslo123</Value>
+              <PlainText>true</PlainText>
+            </Password>
+            <Username>Administrator</Username>
+          </AutoLogon>
+          <TimeZone>UTC</TimeZone>
+          <OOBE>
+            <HideEULAPage>true</HideEULAPage>
+            <HideLocalAccountScreen>true</HideLocalAccountScreen>
+            <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+            <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+            <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+            <ProtectYourPC>3</ProtectYourPC>
+          </OOBE>
+          <FirstLogonCommands>
+            <SynchronousCommand wcm:action="add">
+              <Order>1</Order>
+              <CommandLine>PowerShell -ExecutionPolicy Bypass -NoProfile  F:\trigger-wsl.ps1</CommandLine>
+              <Description>Trigger wsl and shut down the VM</Description>
+            </SynchronousCommand>
+          </FirstLogonCommands>
+        </component>
+      </settings>
+    </unattend>
+  enable-wsl.ps1: |
+    do {
+      $ping = test-connection -comp kubevirt.io -count 1 -Quiet
+      Write-Output "Waiting until network is up"
+    } until ($ping)
+
+    Function Download-File($uri, $outFile) {
+      Write-Host "Downloading the file from $uri to $outFile"
+      $ProgressPreference = "SilentlyContinue"
+      Invoke-WebRequest -Uri $uri -OutFile $outFile
+      $ProgressPreference = "Continue"
+      Write-Host "File downloaded"
+    }
+
+    #install wsl
+    Download-File "https://github.com/microsoft/WSL/releases/download/2.3.26/wsl.2.3.26.0.x64.msi" "C:\wsl.msi"
+
+    Start-Process msiexec -Wait -ArgumentList "/i C:\wsl.msi /qn /passive /norestart"
+
+    wsl --install -d ubuntu
+
+    Remove-Item "C:\wsl.msi"
+  trigger-wsl.ps1: |
+    Start-Job -ScriptBlock {
+      Write-Output "Starting installation of Ubuntu. Waiting..."
+      wsl --install -d ubuntu
+    }
+
+    #wait until the ubuntu VM is available
+    $ubuntuAvailable=-1
+    while ($ubuntuAvailable -eq -1) {
+      Write-Output "Ubuntu not available. Waiting..."
+      $process = Start-Process -FilePath "wsl" -ArgumentList "-u root apt-get update" -Passthru
+      Wait-Process $process.id
+      $ubuntuAvailable=$process.exitcode
+      Start-Sleep -Seconds 10
+    }
+
+    $packageInstalled=-1
+    while ($packageInstalled -eq -1) {
+      Write-Output "stress-ng package not installed. Waiting..."
+      $process = Start-Process -FilePath "wsl" -ArgumentList "-u root apt-get install -y stress-ng" -Passthru
+      Wait-Process $process.id
+      $packageInstalled=$process.exitcode
+      Start-Sleep -Seconds 10
+    }
+
+    #start wsl on start up
+    schtasks /create /sc ONSTART /tn "wsl" /rl highest /ru system /tr "wsl"  
+
+    # Shut down the machine
+    Stop-Computer -Force
+
+  post-update.ps1: |
+    #this function is for disabling the status bar, because when the status bar is active, it can slow down 
+    #download very drastically https://github.com/PowerShell/PowerShell/issues/2138
+    Function Download-File($uri, $outFile) {
+      Write-Host "Downloading the file from $uri to $outFile"
+      $ProgressPreference = "SilentlyContinue"
+      Invoke-WebRequest -Uri $uri -OutFile $outFile
+      $ProgressPreference = "Continue"
+      Write-Host "File downloaded"
+    }
+
+    # Install virtio guest drivers
+    Start-Process msiexec -Wait -ArgumentList "/i E:\virtio-win-gt-x64.msi /qn /passive /norestart"
+
+    # Install qemu guest agent
+    Start-Process msiexec -Wait -ArgumentList "/i E:\guest-agent\qemu-ga-x86_64.msi /qn /passive /norestart"
+
+    do {
+      $ping = test-connection -comp kubevirt.io -count 1
+      Write-Output "Waiting until network is up"
+      Start-Sleep -Seconds 5
+    } until ($ping)
+
+    Download-File "https://www.python.org/ftp/python/3.13.0/python-3.13.0.exe" "C:\python.exe"
+    Start-Process "C:\python.exe" -Wait -ArgumentList " /passive InstallAllUsers=1 PrependPath=1 Include_test=0"
+    Remove-Item "C:\python.exe"
+
+    #install psutils
+    & "C:\Program Files (x86)\Python313-32\Scripts\pip.exe" install psutil
+
+    Download-File "https://download.sysinternals.com/files/PSTools.zip" "c:\PSTools.zip"
+    Expand-Archive "C:\PSTools.zip" -DestinationPath "C:\PSExec"
+    Remove-Item "C:\PSTools.zip"
+
+    #Install ssh
+    $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/v9.8.1.0p1-Preview/OpenSSH-Win64.zip"
+    $sshZipFile = "C:\ssh.zip"
+    $sshFolder = "C:\ssh\OpenSSH-Win64"
+
+    Download-File $url $sshZipFile
+    Expand-Archive -LiteralPath $sshZipFile -DestinationPath "C:\ssh"
+    (Get-Content $sshFolder\sshd_config_default).Replace("#Port 22", "Port 22") | Set-Content $sshFolder\sshd_config_default
+    (Get-Content $sshFolder\sshd_config_default).Replace("#PasswordAuthentication yes", "PasswordAuthentication yes") | Set-Content $sshFolder\sshd_config_default
+    setx PATH "$env:path;C:\Program Files\$sshFolder" -m
+    C:\ssh\OpenSSH-Win64\install-sshd.ps1
+
+    Set-Service -Name sshd -StartupType "Automatic"
+
+    if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
+      Write-Output "Firewall Rule OpenSSH-Server-In-TCP does not exist, creating it..."
+      New-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -DisplayName "OpenSSH Server (sshd)" -Profile Any -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+    }
+
+    # Download and run SDelete
+    $url = "https://download.sysinternals.com/files/SDelete.zip"
+    $file = "C:\SDelete.zip"
+    $path = "C:\SDelete"
+    Download-File $url $file
+    Expand-Archive -LiteralPath $file -DestinationPath $path
+    Start-Process $path\sdelete64.exe -Wait -ArgumentList "-accepteula -z C:"
+    Remove-Item $file
+    Remove-Item $path\sdelete64.exe

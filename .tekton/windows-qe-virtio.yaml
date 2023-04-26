@@ -1,0 +1,64 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: windows11-qe-virtio-installer-run
+  annotations:
+    pipelinesascode.tekton.dev/pipeline: "pipeline/windows-autounattend.yaml"
+    pipelinesascode.tekton.dev/on-comment: "^/windows11-qe-virtio"
+    pipelinesascode.tekton.dev/on-event: "[incoming,push]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-cel-expression: >-
+      (target_branch == "main") &&
+      (files.all.exists(x, x.matches('.tekton/windows-qe-virtio.yaml|configmaps/autounattend/windows11-qe-virtio.yaml')))
+spec:
+  params:
+    - name: acceptEula
+      value: false
+    - name: resultRegistryURL
+      value: quay.io/ksimon/containerdisks:win11-qe-virtio
+    - name: sourceDVName
+      value: windows-11-source
+    - name: autounattendXMLConfigMapFileName
+      value: windows11-qe-virtio.yaml
+    - name: autounattendConfigMapName
+      value: windows11-qe-virtio-autounattend
+    - name: baseDvName
+      value: win11-qe-virtio
+    - name: isoDVName
+      value: win11-qe-virtio
+    - name: preferenceName
+      value: windows.11.virtio
+    - name: revision
+      value: "{{revision}}"
+    - name: repositoryURL
+      value: "{{repo_url}}"
+  timeouts:
+    pipeline: 2h
+    tasks: 1h
+  pipelineRef:
+    name: windows-autounattend
+  taskRunSpecs:
+    - pipelineTaskName: "modify-windows-iso-file"
+      podTemplate:
+        securityContext:
+          runAsUser: 107
+          fsGroup: 107
+    - pipelineTaskName: "clone-gitlab-repository"
+      podTemplate:
+        securityContext:
+          runAsUser: 10001
+          fsGroup: 10001
+  workspaces:
+    - name: basic-auth
+      secret:
+        secretName: "{{git_auth_secret}}"
+    - name: output
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+ 

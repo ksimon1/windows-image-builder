@@ -1,0 +1,131 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: windows2k25-no-oobe-installer-run
+  annotations:
+    pipelinesascode.tekton.dev/pipeline: "pipeline/windows-autounattend.yaml"
+    pipelinesascode.tekton.dev/on-comment: "^/test-2k25-no-oobe"
+    pipelinesascode.tekton.dev/on-event: "[incoming]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-cel-expression: >-
+      (target_branch == "main") &&
+      (files.all.exists(x, x.matches('.tekton/windows-no-oobe.yaml|configmaps/autounattend/windows2k25-noobe.yaml')))
+spec:
+  params:
+    - name: acceptEula
+      value: false
+    - name: resultRegistryURL
+      value: quay.io/ksimon/containerdisks:windows2k25-no-oobe
+    - name: sourceDVName
+      value: windows-2k25-source
+    - name: autounattendXMLConfigMapFileName
+      value: windows2k25-noobe.yaml
+    - name: autounattendConfigMapName
+      value: windows2k25-nooobe-autounattend
+    - name: baseDvName
+      value: win2k25-noobe
+    - name: isoDVName
+      value: win2k25-noobe
+    - name: preferenceName
+      value: windows.2k22.virtio
+    - name: testingModeEnabled
+      value: false
+    - name: secretName
+      value: kubevirt-disk-uploader-credentials-quay
+    - name: revision
+      value: "{{revision}}"
+    - name: repositoryURL
+      value: "{{repo_url}}"
+  timeouts:
+    pipeline: 2h
+    tasks: 1h
+  pipelineRef:
+    name: windows-autounattend
+  taskRunSpecs:
+    - pipelineTaskName: "modify-windows-iso-file"
+      podTemplate:
+        securityContext:
+          runAsUser: 107
+          fsGroup: 107
+    - pipelineTaskName: "clone-gitlab-repository"
+      podTemplate:
+        securityContext:
+          runAsUser: 10001
+          fsGroup: 10001
+  workspaces:
+    - name: basic-auth
+      secret:
+        secretName: "{{git_auth_secret}}"
+    - name: output
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: windows11-no-oobe-installer-run
+  annotations:
+    pipelinesascode.tekton.dev/pipeline: "pipeline/windows-autounattend.yaml"
+    pipelinesascode.tekton.dev/on-comment: "^/test-11-no-oobe"
+    pipelinesascode.tekton.dev/on-event: "[incoming]"
+    pipelinesascode.tekton.dev/on-cel-expression: >-
+      (target_branch == "main") &&
+      (files.all.exists(x, x.matches('.tekton/windows-no-oobe.yaml|configmaps/autounattend/windows11-noobe.yaml')))
+spec:
+  params:
+    - name: acceptEula
+      value: false
+    - name: resultRegistryURL
+      value: quay.io/ksimon/containerdisks:windows11-no-oobe
+    - name: sourceDVName
+      value: windows-11-source
+    - name: autounattendXMLConfigMapFileName
+      value: windows11-noobe.yaml
+    - name: autounattendConfigMapName
+      value: windows11-noobe-autounattend
+    - name: baseDvName
+      value: win11-noobe
+    - name: isoDVName
+      value: win11-noobe
+    - name: preferenceName
+      value: windows.11.virtio
+    - name: secret-name
+      value: kubevirt-disk-uploader-credentials-quay
+    - name: revision
+      value: "{{revision}}"
+    - name: repositoryURL
+      value: "{{repo_url}}"
+  timeouts:
+    pipeline: 2h
+    tasks: 1h
+  pipelineRef:
+    name: windows-autounattend
+  taskRunSpecs:
+    - pipelineTaskName: "modify-windows-iso-file"
+      podTemplate:
+        securityContext:
+          runAsUser: 107
+          fsGroup: 107
+    - pipelineTaskName: "clone-gitlab-repository"
+      podTemplate:
+        securityContext:
+          runAsUser: 10001
+          fsGroup: 10001
+  workspaces:
+    - name: basic-auth
+      secret:
+        secretName: "{{git_auth_secret}}"
+    - name: output
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi

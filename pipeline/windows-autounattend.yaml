@@ -1,0 +1,486 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: windows-autounattend
+spec:
+  workspaces:
+    - name: output
+    - name: basic-auth
+  description: >-
+    This pipeline triggers installation of Windows from ISO with autounattend xml. 
+    Then the result disk is pushed to registries.
+  params:
+    - name: acceptEula
+      description: By setting this parameter, you are agreeing to the applicable Microsoft end user license agreement(s) for each deployment or installation for the Microsoft product(s).
+      type: string
+    - name: resultRegistryURL
+      description: Registry URL where the result image will be pushed
+      type: string
+    - description: Name of the source PVC.
+      name: sourceDVName
+      type: string
+    - name: autounattendXMLConfigMapFileName
+      description: File name where is stored the autounattend XML ConfigMap under configmaps/autounattend path. 
+      type: string
+    - name: instanceTypeName
+      type: string
+      description: Name of VirtualMachineClusterInstancetype object
+      default: u1.large
+    - name: instanceTypeKind
+      type: string
+      description: Kind of VirtualMachineInstancetype object
+      default: VirtualMachineClusterInstancetype
+    - name: preferenceName
+      type: string
+      description: Name of VirtualMachineClusterPreference object
+      default: windows.11.virtio
+    - name: virtualMachinePreferenceKind
+      type: string
+      description: Kind of virtualMachinePreference object
+      default: VirtualMachineClusterPreference
+    - default: windows11-autounattend
+      description: Name of the ConfigMap containing the sysprep configuration files (autounattend.xml, etc.). For example windows11-autounattend, windows10-efi-autounattend or windows2022-autounattend. It is possible to provide customize ConfigMaps created by the user too.
+      name: autounattendConfigMapName
+      type: string
+    - default: registry.redhat.io/container-native-virtualization/virtio-win-rhel9@sha256:e1b7710cebb2a1a1484807df2bce262e6cf230b60699b160cdd9db285db93018
+      description: Reference to the containerdisk containing the virtio-win drivers ISO.
+      name: virtioContainerDiskName
+      type: string
+    - default: win11
+      description: Name of the base DataVolume which is created. Pre-installed Windows VMs can be created from this DataVolume.
+      name: baseDvName
+      type: string
+    - default: win11
+      description: Name of Windows ISO datavolume
+      name: isoDVName
+      type: string
+    - default: kubevirt-disk-uploader-credentials-tekton
+      description: Name of the secret with credentials used for pushing image to registry
+      name: secretName
+      type: string
+    - name: revision
+      description: Revision of the repository - used by pipelines. In PipelineRun use value "{{revision}}".
+      type: string
+    - name: setOwnerReferenceResultDisk
+      description: Set owner reference to the result DV. If set to true, the DV will be deleted from the cluster when PipelineRun is deleted. If set to false, DV will stay in cluster.
+      type: string
+      default: true
+    - name: repositoryURL
+      description: URL of the repository
+      type: string
+      default: true
+  tasks:
+    - name: clone-gitlab-repository
+      params:
+        - name: URL
+          value: $(params.repositoryURL)
+        - name: REVISION
+          value: $(params.revision)
+        - name: SSL_VERIFY
+          value: false
+        - name: VERBOSE
+          value: true
+      workspaces:
+        - name: output
+          workspace: output
+        - name: basic-auth
+          workspace: basic-auth
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: version
+            value: 0.4.1
+    - name: import-configmaps
+      runAfter:
+        - clone-gitlab-repository
+      workspaces:
+        - name: manifest_dir
+          workspace: output
+      params:
+        - name: SCRIPT
+          value: |-
+            if $(params.acceptEula) ; then
+              cat configmaps/autounattend/$(params.autounattendXMLConfigMapFileName) | \
+              sed "s/<AcceptEula>false<\/AcceptEula>/<AcceptEula>true<\/AcceptEula>/g" | \
+              oc apply -f - 
+            else
+              echo "Microsoft Eula is not accepted"
+              echo "Exiting"
+              exit 1
+            fi
+        - name: VERSION
+          value: latest
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: openshift-client
+          - name: version
+            value: 0.2.2
+    - name: import-win-iso
+      params:
+        - name: manifest
+          value: |-
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              generateName: $(params.isoDVName)-
+            spec:
+              source:
+                pvc:
+                  name: $(params.sourceDVName)
+                  namespace: $(context.pipelineRun.namespace)
+              storage:
+                volumeMode: Filesystem
+                resources:
+                  requests:
+                    storage: 9Gi
+        - name: waitForSuccess
+          value: false
+        - name: allowReplace
+          value: true
+        - name: setOwnerReference
+          value: true
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: modify-data-object
+          - name: version
+            value: ">=v4.17.4"
+    - name: modify-windows-iso-file
+      params:
+        - name: pvcName
+          value: $(tasks.import-win-iso.results.name)
+      runAfter:
+        - import-win-iso
+        - create-vm-root-disk
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: modify-windows-iso-file
+          - name: version
+            value: ">=v4.17.4"
+    - name: create-vm-root-disk
+      runAfter:
+        - import-configmaps
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: modify-data-object
+          - name: version
+            value: ">=v4.17.4"
+      params:
+        - name: manifest
+          value: |-
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              generateName: $(params.baseDvName)-
+            spec:
+              storage:
+                resources:
+                  requests:
+                    storage: 30Gi
+              source:
+                blank: {}
+        - name: waitForSuccess
+          value: false
+        - name: allowReplace
+          value: true
+        - name: setOwnerReference
+          value: true
+    - name: create-vm-autounattend
+      params:
+        - name: runStrategy
+          value: RerunOnFailure
+        - name: setOwnerReference
+          value: true
+        - name: manifest
+          value: |-
+            apiVersion: kubevirt.io/v1
+            kind: VirtualMachine
+            metadata:
+              generateName: windows-efi-
+            spec:
+              instancetype:
+                kind: $(params.instanceTypeKind)
+                name: $(params.instanceTypeName)
+              preference:
+                kind: $(params.virtualMachinePreferenceKind)
+                name: $(params.preferenceName)
+              template:
+                spec:
+                  evictionStrategy: LiveMigrateIfPossible
+                  domain:
+                    devices:
+                      disks:
+                        - cdrom:
+                            bus: sata
+                          name: installcdrom
+                          bootOrder: 2
+                        - disk:
+                            bus: virtio
+                          name: rootdisk
+                          bootOrder: 1
+                        - cdrom:
+                            bus: sata
+                          name: virtiocontainerdisk
+                        - cdrom:
+                            bus: sata
+                          name: sysprep
+                  volumes:
+                  - name: installcdrom
+                    persistentVolumeClaim:
+                      claimName: $(tasks.import-win-iso.results.name)
+                  - name: virtiocontainerdisk
+                    containerDisk:
+                      image: $(params.virtioContainerDiskName)
+                  - name: sysprep
+                    sysprep:
+                      configMap: 
+                        name: $(params.autounattendConfigMapName)
+                  - dataVolume:
+                      name:  $(tasks.create-vm-root-disk.results.name)
+                    name: rootdisk
+      runAfter:
+        - modify-windows-iso-file
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: create-vm-from-manifest
+          - name: version
+            value: ">=v4.17.4"
+    - name: wait-for-vmi-status
+      params:
+        - name: vmiName
+          value: $(tasks.create-vm-autounattend.results.name)
+        - name: vmiNamespace
+          value: $(tasks.create-vm-autounattend.results.namespace)
+        - name: successCondition
+          value: status.phase == Succeeded
+        - name: failureCondition
+          value: status.phase in (Failed, Unknown)
+      runAfter:
+        - create-vm-autounattend
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: wait-for-vmi-status
+          - name: version
+            value: ">=v4.17.4"
+    - name: create-result-root-disk
+      runAfter:
+        - wait-for-vmi-status
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: modify-data-object
+          - name: version
+            value: ">=v4.17.4"
+      params:
+        - name: manifest
+          value: |-
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              labels:
+                "instancetype.kubevirt.io/default-instancetype-kind": $(params.instanceTypeKind)
+                "instancetype.kubevirt.io/default-instancetype": $(params.instanceTypeName)
+                "instancetype.kubevirt.io/default-preference-kind": $(params.virtualMachinePreferenceKind)
+                "instancetype.kubevirt.io/default-preference": $(params.preferenceName)
+              name: $(params.baseDvName)
+            spec:
+              storage:
+                resources:
+                  requests:
+                    storage: 30Gi
+              source:
+                pvc:
+                  name: $(tasks.create-vm-root-disk.results.name)
+                  namespace: $(tasks.create-vm-root-disk.results.namespace)
+        - name: waitForSuccess
+          value: true
+        - name: allowReplace
+          value: true
+        - name: setOwnerReference
+          value: $(params.setOwnerReferenceResultDisk)
+    - name: create-datasource-root-disk
+      runAfter:
+        - create-result-root-disk
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: modify-data-object
+          - name: version
+            value: ">=v4.17.4"
+      params:
+        - name: manifest
+          value: |-
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataSource
+            metadata:
+              labels:
+                "instancetype.kubevirt.io/default-instancetype-kind": $(params.instanceTypeKind)
+                "instancetype.kubevirt.io/default-instancetype": $(params.instanceTypeName)
+                "instancetype.kubevirt.io/default-preference-kind": $(params.virtualMachinePreferenceKind)
+                "instancetype.kubevirt.io/default-preference": $(params.preferenceName)
+              name: $(tasks.create-result-root-disk.results.name)
+              namespace: $(tasks.create-result-root-disk.results.namespace)
+            spec:
+              source:
+                pvc:
+                  name: $(tasks.create-result-root-disk.results.name)
+                  namespace: $(tasks.create-result-root-disk.results.namespace)
+        - name: waitForSuccess
+          value: false
+        - name: allowReplace
+          value: true
+        - name: setOwnerReference
+          value: $(params.setOwnerReferenceResultDisk)
+    - name: upload-image-to-registries
+      retries: 2
+      params:
+        - name: EXPORT_SOURCE_KIND
+          value: vm
+        - name: EXPORT_SOURCE_NAME
+          value: $(tasks.create-vm-autounattend.results.name)
+        - name: VOLUME_NAME
+          value: $(tasks.create-vm-root-disk.results.name)
+        - name: IMAGE_DESTINATION
+          value: $(params.resultRegistryURL)
+        - name: PUSH_TIMEOUT
+          value: 600
+        - name: SECRET_NAME
+          value: $(params.secretName)
+      runAfter:
+        - create-result-root-disk
+      timeout: "6h0m0s"
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: disk-uploader
+          - name: version
+            value: ">=v4.17.4"
+  finally:
+    - name: cleanup-vm
+      params:
+        - name: vmName
+          value: $(tasks.create-vm-autounattend.results.name)
+        - name: vmNamespace
+          value: $(tasks.create-vm-autounattend.results.namespace)
+        - name: delete
+          value: true
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: cleanup-vm
+          - name: version
+            value: ">=v4.17.4"
+    - name: delete-imported-configmaps
+      workspaces:
+        - name: manifest_dir
+          workspace: output
+      params:
+        - name: SCRIPT
+          value: |-
+            oc delete -f configmaps/autounattend/$(params.autounattendXMLConfigMapFileName)
+        - name: VERSION
+          value: latest
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: redhat-tekton-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: openshift-client
+          - name: version
+            value: 0.2.2
+  results:
+    - description: Name of the created base DataVolume
+      name: baseDvName
+      value: $(tasks.create-result-root-disk.results.name)
+    - description: Namespace of the created base DataVolume
+      name: baseDvNamespace
+      value: $(tasks.create-result-root-disk.results.namespace)
