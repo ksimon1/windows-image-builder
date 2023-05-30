@@ -1,0 +1,30 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: windows11-virtio-installer-run-
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/pipeline: "./pipeline/windows-efi-installer.yaml"
+    pipelinesascode.tekton.dev/on-comment: "^/test-pr"
+spec:
+  params:
+    - name: winImageDownloadURL
+      value: https://software.download.prss.microsoft.com/dbazure/Win11_23H2_English_x64v2.iso?t=4bce3a87-9ad6-4718-9350-9f87b8b1241f&P1=1724766600&P2=601&P3=2&P4=B4URPG1bvh83ciX6dMWFsR%2fxAlwUimUMRZHs9ByQh%2bNyNVIUlwJvfXyBS5nCF6PeUWvidWYgcZ9ToGdDk5Ss0htWOodbHSorgXdPJht00loZxdIjWEHxRmqP4NGRKDsqz1Lj1h70xitbqT9gOW8h6dGV5tERPVUhatWVKwMi%2biAVCKj6yhYDbQOeVgfmlbbMK8O4aeBe4duqGCiS%2fD4cCt4F1TasBVLy1YHs6SeAxdGBREMu6EngrrChfOY4p8xDVGltxkvmAphVqb6XAFqEoehr0I0UibJHu%2bQ8d44Ime6WXfh8qPExdu4FMukYarGqYEcoHiO5GF5CjW2%2bjz%2bPaw%3d%3d
+    - name: acceptEula
+      value: true
+    - name: autounattendXMLConfigMapsURL
+      value: "abcd"
+    - name: autounattendConfigMapName
+      value: windows11-virtio-autounattend
+  timeouts:
+    pipeline: 10h
+    tasks: 9h
+  pipelineRef:
+    name: windows-efi-installer
+  taskRunSpecs:
+    - pipelineTaskName: "modify-windows-iso-file"
+      podTemplate:
+        securityContext:
+          runAsUser: 107
+          fsGroup: 107
