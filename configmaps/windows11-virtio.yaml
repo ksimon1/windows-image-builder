@@ -2,11 +2,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: windows10-bios-autounattend-test
+  name: windows11-virtio-autounattend
 data:
   autounattend.xml: |
     <?xml version="1.0" encoding="utf-8"?>
-    <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+    <unattend
+      xmlns="urn:schemas-microsoft-com:unattend"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
       <settings pass="windowsPE">
         <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
           <SetupUILanguage>
@@ -20,7 +22,7 @@ data:
         <component name="Microsoft-Windows-PnpCustomizationsWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
           <DriverPaths>
             <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-              <Path>E:\viostor\w10\amd64</Path>
+              <Path>E:\viostor\w11\amd64</Path>
             </PathAndCredentials>
           </DriverPaths>
         </component>
@@ -28,22 +30,55 @@ data:
           <DiskConfiguration>
             <WillShowUI>Never</WillShowUI>
             <Disk wcm:action="add">
+              <!-- https://foxpa.ws/win-10-11-unattended -->
+              <!-- https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/configure-uefigpt-based-hard-drive-partitions?view=windows-11 -->
               <CreatePartitions>
-                <!-- Windows partition -->
                 <CreatePartition wcm:action="add">
                   <Order>1</Order>
+                  <Type>Primary</Type>
+                  <Size>700</Size>
+                </CreatePartition>
+                <CreatePartition wcm:action="add">
+                  <Order>2</Order>
+                  <Type>EFI</Type>
+                  <Size>100</Size>
+                </CreatePartition>
+                <CreatePartition wcm:action="add">
+                  <Order>3</Order>
+                  <Type>MSR</Type>
+                  <Size>128</Size>
+                </CreatePartition>
+                <CreatePartition wcm:action="add">
+                  <Order>4</Order>
                   <Type>Primary</Type>
                   <Extend>true</Extend>
                 </CreatePartition>
               </CreatePartitions>
               <ModifyPartitions>
-                <!-- Windows partition -->
                 <ModifyPartition wcm:action="add">
                   <Order>1</Order>
                   <PartitionID>1</PartitionID>
-                  <Label>OS</Label>
+                  <Label>WINRE</Label>
                   <Format>NTFS</Format>
+                  <!-- https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-setup-diskconfiguration-disk-modifypartitions-modifypartition-typeid -->
+                  <TypeID>DE94BBA4-06D1-4D40-A16A-BFD50179D6AC</TypeID>
+                </ModifyPartition>
+                <ModifyPartition wcm:action="add">
+                  <Order>2</Order>
+                  <PartitionID>2</PartitionID>
+                  <Label>EFI</Label>
+                  <Format>FAT32</Format>
+                </ModifyPartition>
+                <ModifyPartition wcm:action="add">
+                  <Order>3</Order>
+                  <PartitionID>3</PartitionID>
+                </ModifyPartition>
+                <ModifyPartition wcm:action="add">
+                  <Order>4</Order>
+                  <PartitionID>4</PartitionID>
+                  <Label>Windows</Label>
                   <Letter>C</Letter>
+                  <Format>NTFS</Format>
                 </ModifyPartition>
               </ModifyPartitions>
               <DiskID>0</DiskID>
@@ -55,12 +90,12 @@ data:
               <InstallFrom>
                 <MetaData wcm:action="add">
                   <Key>/Image/Description</Key>
-                  <Value>Windows 10 Pro</Value>
+                  <Value>Windows 11 Pro</Value>
                 </MetaData>
               </InstallFrom>
               <InstallTo>
                 <DiskID>0</DiskID>
-                <PartitionID>1</PartitionID>
+                <PartitionID>4</PartitionID>
               </InstallTo>
             </OSImage>
           </ImageInstall>
@@ -105,14 +140,34 @@ data:
     </unattend>
   post-install.ps1: |
     # Install virtio guest drivers
-    # ADDLOCAL is specified to workaround a bug in virtio-win-0.1.217.iso
-    # See:
-    #   - https://github.com/virtio-win/virtio-win-guest-tools-installer/issues/33
-    #   - https://github.com/virtio-win/virtio-win-pkg-scripts/issues/60
-    Start-Process msiexec -Wait -ArgumentList "/i E:\virtio-win-gt-x64.msi /qn /passive /norestart ADDLOCAL=FE_balloon_driver,FE_network_driver,FE_vioinput_driver,FE_viorng_driver,FE_vioscsi_driver,FE_vioserial_driver,FE_viostor_driver,FE_viofs_driver,FE_viogpudo_driver"
+    Start-Process msiexec -Wait -ArgumentList "/i E:\virtio-win-gt-x64.msi /qn /passive /norestart"
 
     # Install qemu guest agent
     Start-Process msiexec -Wait -ArgumentList "/i E:\guest-agent\qemu-ga-x86_64.msi /qn /passive /norestart"
+
+    #install wsl
+    #Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
+    #wsl --install -d Ubuntu
+
+    #only in use case when virtio drivers are not installed
+    #Set-NetIPInterface -InterfaceIndex $(Get-NetAdapter).ifIndex -NlMtuBytes 1400
+
+    #enable administrator account
+    net user Administrator /active:yes
+    net user Administrator Heslo123
+
+    New-Item -Path "c:\" -Name "hvinfo" -ItemType "directory"
+
+    Invoke-WebRequest https://download.sysinternals.com/files/PSTools.zip -OutFile c:\PSTools.zip
+    Expand-Archive C:\PSTools.zip -DestinationPath C:\PSExec
+
+    New-Item -Path "c:\" -Name "tools" -ItemType "directory"
+
+    #Invoke-WebRequest https://cnv-qe-server.rhos-psi.cnv-qe.rhood.us/files/cnv-tests/windows-images/tools/cpu_mem_usage.py -OutFile c:\tools\cpu_mem_usage.py
+    
+    #install python
+    #winget install python -e --silent --accept-source-agreements --accept-package-agreements
+
 
     # Rename cached unattend.xml to avoid it is picked up by sysprep
     mv C:\Windows\Panther\unattend.xml C:\Windows\Panther\unattend.install.xml

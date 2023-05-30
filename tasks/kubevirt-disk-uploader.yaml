@@ -1,0 +1,64 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: kubevirt-disk-uploader-task
+  labels:
+    app.kubernetes.io/version: "0.5.0"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.43.0"
+    tekton.dev/categories: Automation
+    tekton.dev/tags: kubevirt, containerdisks
+    tekton.dev/displayName: "KubeVirt Disk Uploader"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Automates the extraction of disk and uploads it to a container registry,
+    to be used in multiple Kubernetes clusters.
+  params:
+  - name: VM_NAME
+    description: The name of the virtual machine
+    type: string
+  - name: VOLUME_NAME
+    description: The volume name of the virtual machine
+    type: string
+  - name: IMAGE_DESTINATION
+    description: Destination of the image in container registry
+    type: string
+  - name: ENABLE_VIRT_SYSPREP
+    description: Enable or disable preparation of disk image
+    type: string
+  - name: PUSH_TIMEOUT
+    description: ContainerDisk push timeout in minutes
+    type: string
+  steps:
+  - name: kubevirt-disk-uploader-step
+    image: quay.io/ksimon/kubevirt-disk-uploader:latest
+    env:
+    - name: REGISTRY_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: kubevirt-disk-uploader-credentials-tekton
+          key: registryUsername
+    - name: REGISTRY_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: kubevirt-disk-uploader-credentials-tekton
+          key: registryPassword
+    command: ["/usr/local/bin/kubevirt-disk-uploader"]
+    args:
+    - "--vmname"
+    - $(params.VM_NAME)
+    - "--volumename"
+    - $(params.VOLUME_NAME)
+    - "--imagedestination"
+    - $(params.IMAGE_DESTINATION)
+    - "--enablevirtsysprep"
+    - $(params.ENABLE_VIRT_SYSPREP)
+    - "--pushtimeout"
+    - $(params.PUSH_TIMEOUT)
+    computeResources:
+      requests:
+        memory: "3Gi"
+      limits:
+        memory: "5Gi"
