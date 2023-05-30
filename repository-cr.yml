@@ -1,0 +1,8 @@
+
+apiVersion: "pipelinesascode.tekton.dev/v1alpha1"
+kind: Repository
+metadata:
+  name: windows-image-rebuilder
+  namespace: kubevirt
+spec:
+  url: "github.com/ksimon1/windows-image-rebuilder"
