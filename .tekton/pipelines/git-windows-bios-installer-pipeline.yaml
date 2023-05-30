@@ -86,7 +86,7 @@ spec:
             workingDir: $(workspaces.source.path)
             script: |
               #!/usr/bin/bash
-              oc apply -f windows10-bios-autounattend-test.yaml -n kubevirt
+              oc apply -f autounatted/windows10-autounattend-test.yaml -n kubevirt
     - name: copy-template
       runAfter:
         - create-configmap

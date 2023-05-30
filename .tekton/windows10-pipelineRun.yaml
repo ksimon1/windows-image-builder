@@ -2,12 +2,23 @@ apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
   name: win10
-  namespace: kubevirt
   annotations:
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/target-namespace: "kubevirt"
+    pipelinesascode.tekton.dev/pipeline: "[.tekton/pipelines/git-windows-bios-installer-pipeline.yaml]"
+    pipelinesascode.tekton.dev/task-1: "git-clone"
+    pipelinesascode.tekton.dev/task: "[.tekton/tasks/kubevirt-tekton-tasks-okd.yaml]"
 spec:
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
   params:
     - name: autounattendConfigMapName
       value: windows10-bios-autounattend-test
@@ -27,6 +38,10 @@ spec:
       value: kubevirt-os-images
     - name: isoDVName
       value: win10
+    - name: repo_url
+      value: "{{repo_url}}"
+    - name: revision
+      value: "{{revision}}"
   pipelineRef:
     name: git-windows-bios-installer
   serviceAccountName: pipeline
