@@ -27,6 +27,6 @@ spec:
     - name: isoDVName
       value: win10
   pipelineRef:
-    name: windows-bios-installer
+    name: git-windows-bios-installer
   serviceAccountName: pipeline
   timeout: 2h0m0s
