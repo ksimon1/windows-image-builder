@@ -28,3 +28,4 @@ spec:
         securityContext:
           runAsUser: 107
           fsGroup: 107
+ 
