@@ -44,6 +44,11 @@ spec:
         securityContext:
           runAsUser: 107
           fsGroup: 107
+    - pipelineTaskName: "clone-gitlab-repository"
+      podTemplate:
+        securityContext:
+          runAsUser: 10001
+          fsGroup: 10001
   workspaces:
     - name: basic-auth
       secret:
@@ -56,3 +61,4 @@ spec:
           resources:
             requests:
               storage: 1Gi
+ 

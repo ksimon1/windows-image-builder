@@ -43,7 +43,7 @@ spec:
       description: Name of the ConfigMap containing the sysprep configuration files (autounattend.xml, etc.). For example windows11-autounattend, windows10-efi-autounattend or windows2022-autounattend. It is possible to provide customize ConfigMaps created by the user too.
       name: autounattendConfigMapName
       type: string
-    - default: registry-proxy.engineering.redhat.com/rh-osbs/container-native-virtualization-virtio-win-rhel9:cnv-4.17-rhel-9-containers-candidate-70466-20241016162753
+    - default: registry.redhat.io/container-native-virtualization/virtio-win-rhel9@sha256:e1b7710cebb2a1a1484807df2bce262e6cf230b60699b160cdd9db285db93018
       description: Reference to the containerdisk containing the virtio-win drivers ISO.
       name: virtioContainerDiskName
       type: string
@@ -79,6 +79,8 @@ spec:
           value: $(params.revision)
         - name: SSL_VERIFY
           value: false
+        - name: VERBOSE
+          value: true
       workspaces:
         - name: output
           workspace: output
@@ -106,7 +108,7 @@ spec:
       params:
         - name: SCRIPT
           value: |-
-            if [ "$(params.acceptEula)" ]; then
+            if $(params.acceptEula) ; then
               cat configmaps/autounattend/$(params.autounattendXMLConfigMapFileName) | \
               sed "s/<AcceptEula>false<\/AcceptEula>/<AcceptEula>true<\/AcceptEula>/g" | \
               oc apply -f - 

@@ -15,7 +15,7 @@ spec:
   params:
     - name: acceptEula
       value: false
-    - name: resultRegistryUrl
+    - name: resultRegistryURL
       value: quay.io/ksimon/containerdisks:windows2k25-no-oobe
     - name: sourceDVName
       value: windows-2k25-source
@@ -48,6 +48,11 @@ spec:
         securityContext:
           runAsUser: 107
           fsGroup: 107
+    - pipelineTaskName: "clone-gitlab-repository"
+      podTemplate:
+        securityContext:
+          runAsUser: 10001
+          fsGroup: 10001
   workspaces:
     - name: basic-auth
       secret:
@@ -107,6 +112,11 @@ spec:
         securityContext:
           runAsUser: 107
           fsGroup: 107
+    - pipelineTaskName: "clone-gitlab-repository"
+      podTemplate:
+        securityContext:
+          runAsUser: 10001
+          fsGroup: 10001
   workspaces:
     - name: basic-auth
       secret:
