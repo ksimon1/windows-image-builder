@@ -14,7 +14,7 @@ metadata:
 spec:
   params:
     - name: acceptEula
-      value: false
+      value: true
     - name: resultRegistryURL
       value: quay.io/ksimon/containerdisks:win11-qe-virtio
     - name: sourceDVName
